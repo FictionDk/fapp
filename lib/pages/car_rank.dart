@@ -113,6 +113,7 @@ class _CarRankViewState extends State<CarRankView> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_TITLE),
+        leading: IconButton(onPressed: (){Navigator.pop(context);}, icon: const Icon(Icons.arrow_back)),
         actions: [
           PopupMenuButton(
             onSelected: (String result){
