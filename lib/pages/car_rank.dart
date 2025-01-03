@@ -16,7 +16,7 @@ class _CarRankViewState extends State<CarRankView> {
   final _path = '/motor/pc/car/rank_data';
 
   int _offset = 0;
-  final int _pageSize = 10;
+  final int _pageSize = 9;
   String _errMsg = '';
   final List<dynamic> _rankData = [];
   bool _hasMore = true;
@@ -153,7 +153,7 @@ class _CarRankViewState extends State<CarRankView> {
                         height: itemHeight,
                         child: ListTile(
                           leading: Image.network(item['image']),
-                          title: Text("${item['series_name']}}"),
+                          title: Text("${item['series_name']}"),
                           subtitle: Text('${item['count']}'),
                         ),
                       );

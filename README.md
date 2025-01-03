@@ -30,9 +30,10 @@ export PUB_HOSTED_URL="https://pub.flutter-io.cn"
 export FLUTTER_STORAGE_BASE_URL="https://storage.flutter-io.cn"
 ```
 
-## List to be improved
-1. Different layout templates
-2. Route jump
+## build
+1. flutter pub get && flutter pub run flutter_launcher_icons:main
+2. flutter build windows --release (can use `Inno Setup` to build installer)
+3. flutter build apk --release
 
 ## Ref
 1. [depend for install](https://docs.flutter.dev/get-started/install/windows/mobile)

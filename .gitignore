@@ -41,3 +41,9 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+/ios/**/*.png
+/android/**/*.png
+/android/app/src/main/res/values/colors.xml
+/android/app/src/main/res/mipmap-anydpi-v26/launcher_icon.xml
+/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
