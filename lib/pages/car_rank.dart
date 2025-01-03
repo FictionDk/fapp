@@ -12,15 +12,17 @@ class CarRankView extends StatefulWidget {
 
 class _CarRankViewState extends State<CarRankView> {
   final _TITLE = "Car selling rank";
+  final _hosts = 'www.dongchedi.com';
+  final _path = '/motor/pc/car/rank_data';
 
-  int _currPage = 0;
+  int _offset = 0;
   final int _pageSize = 10;
   String _errMsg = '';
   final List<dynamic> _rankData = [];
   bool _hasMore = true;
   bool _isLoading = false;
 
-  String _selectedMonth = '202411';
+  String _selectedMonth = '500';
   final List<Map<String,String>> _monthArr = [{'text': "近半年",'month': '500'}];
   final Map<String,String> _monthMap = {'500':'近半年'};
 
@@ -29,7 +31,7 @@ class _CarRankViewState extends State<CarRankView> {
   @override
   void initState() {
     super.initState();
-    _currPage = 0;
+    _offset = 0;
     _getData();
   }
 
@@ -53,9 +55,9 @@ class _CarRankViewState extends State<CarRankView> {
   }
 
   _getData() async {
-    var url = Uri.https('www.dongchedi.com','/motor/pc/car/rank_data', {
+    var url = Uri.https(_hosts, _path, {
       'aid':'1839','app_name': 'auto_web_pc',
-      'offset':'$_currPage',
+      'offset':'$_offset',
       'count':'$_pageSize',
       'month': _selectedMonth,
       'rank_data_type':'11',
@@ -76,7 +78,7 @@ class _CarRankViewState extends State<CarRankView> {
           final result = jsonDecode(resp.body)['data'];
           final List<dynamic> fetched = result['list'];
           _rankData.addAll(fetched);
-          _currPage++;
+          _offset = _offset + _pageSize;
           _hasMore = fetched.length >= _pageSize;
           List<dynamic> rankMonth = result['sells_rank_month'];
           _monthArr.clear();
@@ -85,7 +87,7 @@ class _CarRankViewState extends State<CarRankView> {
             _monthArr.add({'month':'${v['month']}','text': v['text']});
           }
         }else{
-          _errMsg = "请求失败,${resp.body}";
+          _errMsg = "req failed,${resp.body}";
         }
       });
 
@@ -97,7 +99,7 @@ class _CarRankViewState extends State<CarRankView> {
       });
     }catch(e){
       setState(() {
-        _errMsg = "请求失败,${e.toString()}";
+        _errMsg = "req failed,${e.toString()}";
       });
     }finally {
       setState(() {
@@ -107,7 +109,7 @@ class _CarRankViewState extends State<CarRankView> {
   }
 
   void _reset(){
-    _currPage = 0;
+    _offset = 0;
     setState(() {
       _rankData.clear();
     });
@@ -123,6 +125,7 @@ class _CarRankViewState extends State<CarRankView> {
           PopupMenuButton(
             onSelected: (String result){
               setState(() => _selectedMonth = result);
+              _reset();
             },
             itemBuilder: (BuildContext context) => _monthArr.map((Map<String,String>m){
               return PopupMenuItem<String>(value: m['month'],child: Text(m['text']??''));
@@ -150,7 +153,7 @@ class _CarRankViewState extends State<CarRankView> {
                         height: itemHeight,
                         child: ListTile(
                           leading: Image.network(item['image']),
-                          title: Text("${item['series_name']}-${item['rank']}"),
+                          title: Text("${item['series_name']}}"),
                           subtitle: Text('${item['count']}'),
                         ),
                       );
