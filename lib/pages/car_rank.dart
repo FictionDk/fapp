@@ -20,18 +20,16 @@ class _CarRankViewState extends State<CarRankView> {
   bool _hasMore = true;
   bool _isLoading = false;
 
-  String? _selectedYear;
-  int? _selectedMonth;
-  String _selectedDate = '202411';
-
-  final List<String> _years = List.generate(10, (index) => DateTime.now().year - index).map((e) => e.toString()).toList();
-  final List<int> _months = List.generate(12, (index) => index + 1);
+  String _selectedMonth = '202411';
+  final List<Map<String,String>> _monthArr = [{'text': "近半年",'month': '500'}];
+  final Map<String,String> _monthMap = {'500':'近半年'};
 
   final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
+    _currPage = 0;
     _getData();
   }
 
@@ -47,12 +45,19 @@ class _CarRankViewState extends State<CarRankView> {
     return _buildList(context);
   }
 
+  _calItemHigh(BuildContext context, BoxConstraints constraints){
+    final double statusBarHeight = MediaQuery.of(context).padding.top;
+    final double appBarHeight = AppBar().preferredSize.height;
+    final double availableHeight = constraints.maxHeight - appBarHeight - statusBarHeight;
+    return availableHeight / _pageSize;
+  }
+
   _getData() async {
     var url = Uri.https('www.dongchedi.com','/motor/pc/car/rank_data', {
       'aid':'1839','app_name': 'auto_web_pc',
       'offset':'$_currPage',
       'count':'$_pageSize',
-      'month':_selectedDate,
+      'month': _selectedMonth,
       'rank_data_type':'11',
     });
 
@@ -68,10 +73,17 @@ class _CarRankViewState extends State<CarRankView> {
 
       setState(() {
         if(resp.statusCode == 200){
-          final List<dynamic> fetched = jsonDecode(resp.body)['data']['list'];
+          final result = jsonDecode(resp.body)['data'];
+          final List<dynamic> fetched = result['list'];
           _rankData.addAll(fetched);
           _currPage++;
           _hasMore = fetched.length >= _pageSize;
+          List<dynamic> rankMonth = result['sells_rank_month'];
+          _monthArr.clear();
+          for(var v in rankMonth){
+            _monthMap['${v['month']}'] = v['text'];
+            _monthArr.add({'month':'${v['month']}','text': v['text']});
+          }
         }else{
           _errMsg = "请求失败,${resp.body}";
         }
@@ -95,18 +107,11 @@ class _CarRankViewState extends State<CarRankView> {
   }
 
   void _reset(){
+    _currPage = 0;
     setState(() {
       _rankData.clear();
     });
     _getData();
-  }
-
-  void _updateSelectedDate() {
-    if (_selectedYear != null && _selectedMonth != null) {
-      setState(() {
-        _selectedDate = '$_selectedYear${_selectedMonth.toString().padLeft(2, '0')}';
-      });
-    }
   }
 
   Widget _buildList(BuildContext context) {
@@ -117,63 +122,49 @@ class _CarRankViewState extends State<CarRankView> {
         actions: [
           PopupMenuButton(
             onSelected: (String result){
-              setState(() {
-                _selectedYear = result;
-                _updateSelectedDate();
-              });
+              setState(() => _selectedMonth = result);
             },
-            itemBuilder: (BuildContext context) => _years.map((String year){
-              return PopupMenuItem<String>(value: year,child: Text(year),);
+            itemBuilder: (BuildContext context) => _monthArr.map((Map<String,String>m){
+              return PopupMenuItem<String>(value: m['month'],child: Text(m['text']??''));
             }).toList(),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: Row(children: [
-                Text(_selectedYear ?? '2024'), const Icon(Icons.arrow_drop_down),
+                Text(_monthMap[_selectedMonth]??''), const Icon(Icons.arrow_drop_down),
               ],),
             ),
           ),
-          PopupMenuButton(
-            onSelected: (int result){
-              setState(() {
-                _selectedMonth = result;
-                _updateSelectedDate();
-              });
-            },
-            itemBuilder: (BuildContext context)=> _months.map((int month){
-              return PopupMenuItem<int>(value: month,child: Text(DateTime(0, month).month.toString()),);
-            }).toList(),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Row(children: [
-                Text(_selectedMonth == null ? '11' : DateTime(0, _selectedMonth!).month.toString()),
-                const Icon(Icons.arrow_drop_down),
-            ],),
-            ),
-          ),
         ],
       ),
-      body: _errMsg != '' ? Center(child: Text("$_errMsg"),) : Stack(
-        children: [
-          ListView.builder(
-            controller: _scrollController,
-            itemCount: _rankData.length,
-            itemBuilder:(context,idx){
-              final item = _rankData[idx];
-              return ListTile(
-                leading: Image.network(item['image']),
-                title: Text("${item['series_name']},${item['count']}"),
-              );
-            }),
-          if(_isLoading)
-            Container(
-              color: Colors.black.withOpacity(0.5),
-              child: const Center(
-                child: CircularProgressIndicator(),
-              ),
-            )
-        ],
-      ),
-
+      body: _errMsg != '' ? Center(child: Text("$_errMsg"),) : LayoutBuilder(
+          builder: (BuildContext context, BoxConstraints constraints){
+            double itemHeight = _calItemHigh(context, constraints);
+            return Stack(
+              children: [
+                ListView.builder(
+                    controller: _scrollController,
+                    itemCount: _rankData.length,
+                    itemBuilder:(context,idx){
+                      final item = _rankData[idx];
+                      return SizedBox(
+                        height: itemHeight,
+                        child: ListTile(
+                          leading: Image.network(item['image']),
+                          title: Text("${item['series_name']}-${item['rank']}"),
+                          subtitle: Text('${item['count']}'),
+                        ),
+                      );
+                    }),
+                if(_isLoading)
+                  Container(
+                    color: Colors.black.withOpacity(0.5),
+                    child: const Center(
+                      child: CircularProgressIndicator(),
+                    ),
+                  )
+              ],
+            );
+          }),
       floatingActionButton: _hasMore ?
         FloatingActionButton(
           onPressed: _getData,
@@ -181,7 +172,7 @@ class _CarRankViewState extends State<CarRankView> {
           child: const Icon(Icons.add),
         ) : null,
       persistentFooterButtons: <Widget>[
-        ElevatedButton(onPressed: _reset,child: Text('刷新'),),
+        ElevatedButton(onPressed: _reset,child: Text('Refresh'),)
       ],
     );
   }
