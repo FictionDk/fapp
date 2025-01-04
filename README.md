@@ -16,6 +16,8 @@ Flutter | 3.24.0 | https://docs.flutter.dev/release/archive
 Dart | 3.5.0 | https://docs.flutter.dev/release/archive
 Visual Studio | Visual Studio Community 2022 17.12.3 | https://visualstudio.microsoft.com/zh-hans/downloads/
 Android Studio | 2023.3 | https://developer.android.com/studio/archive
+xcode | 16.2 | https://developer.apple.com/cn/support/xcode/
+cocoapods | 1.16.2 | -
 
 ## Env
 
