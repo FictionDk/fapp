@@ -34,6 +34,7 @@ export FLUTTER_STORAGE_BASE_URL="https://storage.flutter-io.cn"
 1. flutter pub get && flutter pub run flutter_launcher_icons:main
 2. flutter build windows --release (can use `Inno Setup` to build installer)
 3. flutter build apk --release
+4. flutter build ipa --release
 
 ## Ref
 1. [depend for install](https://docs.flutter.dev/get-started/install/windows/mobile)
