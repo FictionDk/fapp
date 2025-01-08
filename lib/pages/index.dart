@@ -15,6 +15,9 @@ class IndexView extends StatelessWidget {
             Navigator.pushNamed(context, 'image');
           }, child: Text('Upload Image')),
           ElevatedButton(onPressed: (){
+            Navigator.pushNamed(context, 'babyBottle');
+          }, child: Text('Save bottle data')),
+          ElevatedButton(onPressed: (){
             Navigator.pushNamed(context, 'login');
           }, child: Text('Return Login')),
         ],
