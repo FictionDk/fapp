@@ -21,10 +21,8 @@ Future<void> cleanMapForList(String key) async {
 Future<void> addMapForList(String key, Map<String,dynamic> mapData) async {
   final instance = await SharedPreferences.getInstance();
   List<String> rList = instance.getStringList(key) ?? [];
-  print('-------------------> $key, ${coverToJson(mapData)}, $rList');
   rList.add(coverToJson(mapData));
   bool r = await instance.setStringList(key, rList);
-  print('-------------------> $r');
 }
 
 Future<List<Map<String,dynamic>>> getMapForList(String key) async {
@@ -39,10 +37,10 @@ Future<List<Map<String,dynamic>>> getMapForList(String key) async {
 }
 
 
-final DateFormat _formatter = DateFormat('yyyy-MM-dd HH:mm:ss');
+final DateFormat _formatter = DateFormat('yyyy-MM-ddTHH:mm:ssZ');
 Map<String,dynamic> coverFromJson(String json){
   final Map<String, dynamic> map = jsonDecode(json);
-  return map.map((k,v)=>MapEntry(k, _parseValue(v)));
+  return map.map((k,v)=>MapEntry(k, _parseValue(k, v)));
 }
 
 String coverToJson(Map<String,dynamic> data){
@@ -60,24 +58,21 @@ dynamic _convertValue(dynamic value) {
   return value;
 }
 
-dynamic _parseValue(dynamic value) {
-  if (value is String && _isCustomFormat(value)) {
+dynamic _parseValue(String key, dynamic value) {
+  if (value is String && _isCustomFormat(key)) {
     try {
       return _formatter.parse(value);
     } catch (_) {
       return value;
     }
   } else if (value is Map) {
-    return value.map((k, v) => MapEntry(k, _parseValue(v)));
+    return value.map((k, v) => MapEntry(k, _parseValue(key, v)));
   } else if (value is List) {
-    return value.map((item) => _parseValue(item)).toList();
+    return value.map((item) => _parseValue(key, item)).toList();
   }
   return value;
 }
 
-bool _isCustomFormat(String value) {
-  // 简单检查是否可能是自定义格式的时间戳
-  // 这里只是一个简单的正则表达式匹配，可以根据需要调整
-  final regex = RegExp(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$');
-  return regex.hasMatch(value);
+bool _isCustomFormat(String key) {
+  return "time" == key;
 }

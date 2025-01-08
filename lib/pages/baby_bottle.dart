@@ -1,8 +1,9 @@
-
+import 'dart:convert';
 
 import 'package:fapp/utils/cached.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:http/http.dart' as http;
 
 class BabyBottleView extends StatefulWidget {
   const BabyBottleView({super.key});
@@ -13,6 +14,11 @@ class BabyBottleView extends StatefulWidget {
 class _BabyBottleState extends State<BabyBottleView> {
   final String cacheKey = "BabyBottle";
   final DateFormat _df = DateFormat('yy-MM-dd HH:mm');
+
+  final String host = "glite.dev.uplasm.com";
+  var header = {"Content-Type": "application/json", "Authorization": "Bearer myfiction"};
+  var timeout = const Duration(seconds: 10);
+
   DateTime _lastFeedTime = DateTime.now(); // 后台返回
 
   int _totalAmount = 0;
@@ -57,12 +63,33 @@ class _BabyBottleState extends State<BabyBottleView> {
       kv.sort((a,b) => (a['time'] as DateTime).compareTo(b['time']));
       _totalAmount = 0;
       _lastFeedTime = DateTime.now();
+      _feeded.clear();
       setState(() {
         _feeded = kv;
         for(var f in _feeded) if(_isNowDay(f['time'])) _totalAmount += f['amount'] as int;
         if(_feeded.isNotEmpty) _lastFeedTime = _feeded[_feeded.length-1]['time'];
       });
     });
+  }
+
+  void _sync() async {
+    var resp = await http.get(Uri.http(host,'/feeds'), headers:header).timeout(timeout);
+    if(resp.statusCode == 200){
+      List<dynamic> rList = jsonDecode(resp.body);
+      if(rList.isEmpty) return;
+      Map<DateTime, int> rMap = Map.fromEntries(rList.map((item)=>
+          MapEntry(DateFormat('yyyy-MM-ddTHH:mm:ssZ').parse(item['FeedAt']), item['FeedAmount'])));
+
+      getMapForList(cacheKey).then((kv){
+        for(var f in kv){
+          if(rMap.containsKey(f['time'] as DateTime)) rMap.remove(f['time']);
+        }
+      });
+      if(rMap.isEmpty) return;
+      rMap.forEach((k,v){
+        addMapForList(cacheKey, {'time':k,'amount':v});
+      });
+    }
   }
 
   void _initMock(){
@@ -179,7 +206,11 @@ class _BabyBottleState extends State<BabyBottleView> {
           IconButton(onPressed: (){
             cleanMapForList(cacheKey);
             _refresh();
-          }, icon: const Icon(Icons.clear))
+          }, icon: const Icon(Icons.restore_from_trash)),
+          IconButton(onPressed: (){
+            _sync();
+            _refresh();
+          }, icon: const Icon(Icons.refresh)),
         ],
       ),
     );
@@ -191,6 +222,27 @@ class _BabyBottleState extends State<BabyBottleView> {
     _lastCount = int.parse(_countController.text);
     addMapForList(cacheKey, {'time':_lastFeedTime,'amount':_lastCount});
     _refresh();
+    _putRemote(_lastFeedTime, _lastCount);
+  }
+
+  _putRemote(DateTime feedAt, int amount) async {
+    try{
+      var resp = await http.post(Uri.http(host,'/feed'), headers:header, body: jsonEncode(
+        {
+          "FeedAt": '${DateFormat('yyyy-MM-ddTHH:mm:ss').format(feedAt)}Z',
+          "FeedAmount": amount,
+          "BabyID": "default"
+        }
+      )).timeout(timeout);
+      if(resp.statusCode == 200){
+        Map<String,dynamic> r = jsonDecode(resp.body);
+        print(r);
+      }else{
+        print(resp.body);
+      }
+    }catch(e){
+      print(e);
+    }
   }
 
   _boxDco(){
