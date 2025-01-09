@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'pages/car_rank.dart';
 import 'router.dart';
 
 void main() {

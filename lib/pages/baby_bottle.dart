@@ -1,9 +1,11 @@
 import 'dart:convert';
 
 import 'package:fapp/utils/cached.dart';
+import 'package:fapp/utils/device.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
+import 'dart:async';
 
 class BabyBottleView extends StatefulWidget {
   const BabyBottleView({super.key});
@@ -14,33 +16,23 @@ class BabyBottleView extends StatefulWidget {
 class _BabyBottleState extends State<BabyBottleView> {
   final String cacheKey = "BabyBottle";
   final DateFormat _df = DateFormat('yy-MM-dd HH:mm');
+  Timer? _timer;
 
   final String host = "glite.dev.uplasm.com";
   var header = {"Content-Type": "application/json", "Authorization": "Bearer myfiction"};
   var timeout = const Duration(seconds: 10);
 
-  DateTime _lastFeedTime = DateTime.now(); // 后台返回
-
+  bool _picked = false;
+  bool _showOptButton = false;
+  DateTime _lastFeedTime = DateTime.now();
   int _totalAmount = 0;
-
   int _lastCount = 0;
-
   int _selectedHour = DateTime.now().hour;
   int _selectedMin = DateTime.now().minute;
   
   final TextEditingController _countController = TextEditingController();
 
   List<Map<String, dynamic>> _feeded = [];
-  List<Map<String, dynamic>> _mookedData = [
-    {'amount': 120, 'time': '25-01-06 19:14'},
-    {'amount': 90, 'time': '25-01-06 16:40'},
-    {'amount': 120, 'time': '25-01-07 14:20'},
-    {'amount': 120, 'time': '25-01-07 09:59'},
-    {'amount': 120, 'time': '25-01-07 07:14'},
-    {'amount': 90, 'time': '25-01-07 05:40'},
-    {'amount': 120, 'time': '25-01-07 04:20'},
-    {'amount': 120, 'time': '25-01-07 02:59'},
-  ];
 
   bool _isKeyboardVisible = false;
 
@@ -55,7 +47,25 @@ class _BabyBottleState extends State<BabyBottleView> {
     super.initState();
     _lastFeedTime = _df.parse('25-01-07 14:20');
     _refresh();
+    getDeviceInfo().then((kv)=> setState(() {
+      header.addAll(kv);
+    }));
+    print("=====================> Init");
+    _startTimer();
     //_initMock();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _startTimer() {
+    _timer = Timer.periodic(Duration(minutes: 1), (Timer timer) {
+      print("=====================> Start refresh");
+      _refresh();
+    });
   }
   
   void _refresh() async{
@@ -68,11 +78,18 @@ class _BabyBottleState extends State<BabyBottleView> {
         _feeded = kv;
         for(var f in _feeded) if(_isNowDay(f['time'])) _totalAmount += f['amount'] as int;
         if(_feeded.isNotEmpty) _lastFeedTime = _feeded[_feeded.length-1]['time'];
+        if(!_picked){
+          _selectedHour = DateTime.now().hour;
+          _selectedMin = DateTime.now().minute;
+        }else{
+          _picked = false;//避免一直都不被刷新
+        }
       });
     });
   }
 
   void _sync() async {
+    print(header);
     var resp = await http.get(Uri.http(host,'/feeds'), headers:header).timeout(timeout);
     if(resp.statusCode == 200){
       List<dynamic> rList = jsonDecode(resp.body);
@@ -92,17 +109,17 @@ class _BabyBottleState extends State<BabyBottleView> {
     }
   }
 
-  void _initMock(){
-    for(Map<String,dynamic> kv in _mookedData){
-      DateTime time = _df.parse(kv['time']);
-      int amount = kv['amount'];
-      if(_isNowDay(time)) _totalAmount += amount;
-      _feeded.add({'amount':amount, 'time': time});
-    }
+  _isBlow(){
+    DateTime now = DateTime.now();
+    DateTime page = DateTime(now.year,now.month,now.day,now.hour,now.minute);
+    Duration d = now.difference(page);
+    print('blow================>${d},${d.inMinutes},${d.inSeconds}');
   }
 
   @override
   Widget build(BuildContext context) {
+    print("==============> $_showOptButton");
+    _isBlow();
     if(_feeded.isEmpty) _refresh();
     // 检查键盘是否可见
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
@@ -113,6 +130,9 @@ class _BabyBottleState extends State<BabyBottleView> {
         _isKeyboardVisible = isKeyboardVisible;
       });
     }
+    // 根据字体大小控制自适应
+    final textScale = MediaQuery.of(context).textScaler;
+    final adaptiveHeight = textScale.scale(28.0);
 
     return Scaffold(
       appBar: AppBar(title: const Text('BabyBottle'),),
@@ -124,9 +144,13 @@ class _BabyBottleState extends State<BabyBottleView> {
             _outline(),
             const SizedBox(height: 8,),
             _putIn(),
-            if(!_isKeyboardVisible) ... [
+            if(_showOptButton) ... [
               const SizedBox(height: 8),
-              _showView(),
+              _optButtonRow(),
+            ],
+            if(!_isKeyboardVisible || !_showOptButton) ... [
+              const SizedBox(height: 8),
+              _showView(adaptiveHeight),
             ],
           ],
         ),
@@ -161,15 +185,15 @@ class _BabyBottleState extends State<BabyBottleView> {
     );
   }
 
-  Widget _showView(){
+  Widget _showView(adaptiveHeight){
     return Container(
-      height: MediaQuery.of(context).size.height * 0.4,
+      height: MediaQuery.of(context).size.height * 0.3,
       decoration: _boxDco(),
       padding: const EdgeInsets.all(8),
       child: SingleChildScrollView(child: Column(
         children:
           _feeded.reversed.map((fed){
-            return SizedBox(height: 20, child: ListTile(
+            return SizedBox(height: adaptiveHeight, child: ListTile(
               title: Text("${_df.format(fed['time'])} \t ${fed['amount']}"),
             ));
           }).toList()),
@@ -183,16 +207,16 @@ class _BabyBottleState extends State<BabyBottleView> {
       child: Row(
         children: [
           Expanded(
-            flex: 2,
+            flex: 3,
             child: DefaultTextStyle(style: const TextStyle(fontSize: 32), child: TextButton(
               onPressed: _timePicked,
               child: Text('${_selectedHour.toString().padLeft(2, '0')}:${_selectedMin.toString().padLeft(2, '0')}')),
           )),
           Expanded(
-            flex: 2,
+            flex: 3,
             child: Container(
               margin: const EdgeInsets.symmetric(vertical: 8),
-              child: TextField(keyboardType: TextInputType.number, maxLength: 3,
+              child: TextField(keyboardType: TextInputType.number,
                 controller: _countController,
                 onTapOutside: (event) => FocusScope.of(context).unfocus(),
               ),
@@ -201,31 +225,86 @@ class _BabyBottleState extends State<BabyBottleView> {
           const SizedBox(width: 18,),
           Expanded(
             flex: 2,
-            child:ElevatedButton(onPressed: _addFeeding, child: Text('记录')),
+            child:GestureDetector(
+              onTapDown: (TapDownDetails d){_handleTapDown(d);},
+              onTapUp: (TapUpDetails d){_handleTapUp(d);},
+              onTapCancel: (){_handleTapCancel();},
+              child: const Text('记录'),
+                //onPressed: _addFeeding, child: Text('记录')
+            ),
           ),
-          IconButton(onPressed: (){
-            cleanMapForList(cacheKey);
-            _refresh();
-          }, icon: const Icon(Icons.restore_from_trash)),
-          IconButton(onPressed: (){
-            _sync();
-            _refresh();
-          }, icon: const Icon(Icons.refresh)),
         ],
       ),
     );
   }
 
+  Timer? _longPressTimer;
+  bool _isLongPressTriggered = false;
+  void _handleTapDown(TapDownDetails d){
+    _longPressTimer = Timer(const Duration(seconds: 5), (){
+      if(mounted) {
+        setState(() {
+          _isLongPressTriggered = true;
+          _showOptButton = true;
+        });
+      }
+    });
+  }
+  void _handleTapUp(TapUpDetails d){
+    if(!_isLongPressTriggered){
+      _addFeeding();
+    }
+    _handleTapCancel();
+  }
+  void _handleTapCancel(){
+    _longPressTimer?.cancel();
+    _longPressTimer = null;
+    setState(() {
+      _isLongPressTriggered = false;
+    });
+  }
+
+  _optButtonRow(){
+    return Container(
+      decoration: _boxDco(),
+      padding: const EdgeInsets.all(8),
+      child: Row(
+        children: [
+          IconButton(onPressed: (){
+            cleanMapForList(cacheKey);
+            _refresh();
+          }, icon: const Icon(Icons.restore_from_trash)),
+          IconButton(onPressed: (){
+          _sync();
+          _refresh();
+          }, icon: const Icon(Icons.refresh)),
+          IconButton(onPressed: (){
+            setState(() {
+              _showOptButton = false;
+            });
+          }, icon: const Icon(Icons.close))
+        ]
+      )
+    );
+  }
+
+
   _addFeeding(){
     DateTime now = DateTime.now();
     _lastFeedTime = DateTime(now.year,now.month,now.day,_selectedHour,_selectedMin);
-    _lastCount = int.parse(_countController.text);
+    try{
+      _lastCount = int.parse(_countController.text);
+    }catch(e){
+    }
+    if(_lastCount == 0) return;
+
     addMapForList(cacheKey, {'time':_lastFeedTime,'amount':_lastCount});
     _refresh();
     _putRemote(_lastFeedTime, _lastCount);
   }
 
   _putRemote(DateTime feedAt, int amount) async {
+    print(header);
     try{
       var resp = await http.post(Uri.http(host,'/feed'), headers:header, body: jsonEncode(
         {
@@ -235,8 +314,7 @@ class _BabyBottleState extends State<BabyBottleView> {
         }
       )).timeout(timeout);
       if(resp.statusCode == 200){
-        Map<String,dynamic> r = jsonDecode(resp.body);
-        print(r);
+        print(jsonDecode(resp.body));
       }else{
         print(resp.body);
       }
@@ -257,6 +335,7 @@ class _BabyBottleState extends State<BabyBottleView> {
     if(picked != null){
       if(!_compare(TimeOfDay.now(), picked)) _showErrorDialog('时间错误', '时间超过当前时间');
       setState(() {
+        _picked = true;
         _selectedHour = picked.hour;
         _selectedMin = picked.minute;
       });
@@ -307,8 +386,14 @@ class _TimeDialogState extends State<TimeDialog> {
       content: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _hourSelect(),const Text(' : '),
-          _minSelect()
+          SizedBox(
+            width: 18,
+            child: _hourSelect()
+          ),const Text(' : '),
+          SizedBox(
+            width: 18,
+            child: _minSelect()
+          )
         ],
       ),
       actions: [
@@ -326,7 +411,7 @@ class _TimeDialogState extends State<TimeDialog> {
       items: List.generate(24, (index) => index).map((int hour){
         return DropdownMenuItem<int>(
             value: hour,
-            child: Text(hour.toString().padLeft(2, '0'),style: const TextStyle(fontSize: 32),));
+            child: Text(hour.toString().padLeft(2, '0'),style: const TextStyle(fontSize: 24),));
       }).toList(),
       onChanged: (int? newVal)=>setState(() {
         _selectedHour = newVal!;
@@ -340,7 +425,7 @@ class _TimeDialogState extends State<TimeDialog> {
       items: List.generate(60, (index) => index).map((int val){
         return DropdownMenuItem<int>(
             value: val,
-            child: Text(val.toString().padLeft(2, '0'), style: const TextStyle(fontSize: 32),));
+            child: Text(val.toString().padLeft(2, '0'), style: const TextStyle(fontSize: 24),));
       }).toList(),
       onChanged: (int? newVal)=>setState(() => _selectedMin = newVal!),
     );
