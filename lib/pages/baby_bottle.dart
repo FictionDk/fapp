@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
 import 'dart:async';
+import 'package:fluttertoast/fluttertoast.dart';
 
 class BabyBottleView extends StatefulWidget {
   const BabyBottleView({super.key});
@@ -50,7 +51,6 @@ class _BabyBottleState extends State<BabyBottleView> {
     getDeviceInfo().then((kv)=> setState(() {
       header.addAll(kv);
     }));
-    print("=====================> Init");
     _startTimer();
     //_initMock();
   }
@@ -62,8 +62,7 @@ class _BabyBottleState extends State<BabyBottleView> {
   }
 
   void _startTimer() {
-    _timer = Timer.periodic(Duration(minutes: 1), (Timer timer) {
-      print("=====================> Start refresh");
+    _timer = Timer.periodic(const Duration(minutes: 1), (Timer timer) {
       _refresh();
     });
   }
@@ -89,7 +88,6 @@ class _BabyBottleState extends State<BabyBottleView> {
   }
 
   void _sync() async {
-    print(header);
     var resp = await http.get(Uri.http(host,'/feeds'), headers:header).timeout(timeout);
     if(resp.statusCode == 200){
       List<dynamic> rList = jsonDecode(resp.body);
@@ -97,11 +95,12 @@ class _BabyBottleState extends State<BabyBottleView> {
       Map<DateTime, int> rMap = Map.fromEntries(rList.map((item)=>
           MapEntry(DateFormat('yyyy-MM-ddTHH:mm:ssZ').parse(item['FeedAt']), item['FeedAmount'])));
 
-      getMapForList(cacheKey).then((kv){
-        for(var f in kv){
-          if(rMap.containsKey(f['time'] as DateTime)) rMap.remove(f['time']);
-        }
-      });
+      List<Map<String, dynamic>> cList = await getMapForList(cacheKey);
+
+      for(var f in cList){
+        if(rMap.containsKey(f['time'] as DateTime)) rMap.remove(f['time']);
+      }
+
       if(rMap.isEmpty) return;
       rMap.forEach((k,v){
         addMapForList(cacheKey, {'time':k,'amount':v});
@@ -109,18 +108,18 @@ class _BabyBottleState extends State<BabyBottleView> {
     }
   }
 
-  _isBlow(){
+  bool _isBlow(DateTime current, DateTime start, int gagMin){
+    return current.difference(start).inMinutes > gagMin;
+  }
+
+  bool _isBlowNow(int gapMin){
     DateTime now = DateTime.now();
-    DateTime page = DateTime(now.year,now.month,now.day,now.hour,now.minute);
-    Duration d = now.difference(page);
-    print('blow================>${d},${d.inMinutes},${d.inSeconds}');
+    return _isBlow(DateTime.now(), DateTime(now.year,now.month,now.day,now.hour,now.minute), gapMin);
   }
 
   @override
   Widget build(BuildContext context) {
-    print("==============> $_showOptButton");
-    _isBlow();
-    if(_feeded.isEmpty) _refresh();
+    if(_feeded.isEmpty || _isBlowNow(0)) _refresh();
     // 检查键盘是否可见
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     final isKeyboardVisible = bottomInset > 0;
@@ -148,7 +147,7 @@ class _BabyBottleState extends State<BabyBottleView> {
               const SizedBox(height: 8),
               _optButtonRow(),
             ],
-            if(!_isKeyboardVisible || !_showOptButton) ... [
+            if(!_isKeyboardVisible && !_showOptButton) ... [
               const SizedBox(height: 8),
               _showView(adaptiveHeight),
             ],
@@ -187,7 +186,7 @@ class _BabyBottleState extends State<BabyBottleView> {
 
   Widget _showView(adaptiveHeight){
     return Container(
-      height: MediaQuery.of(context).size.height * 0.3,
+      height: MediaQuery.of(context).size.height * 0.4,
       decoration: _boxDco(),
       padding: const EdgeInsets.all(8),
       child: SingleChildScrollView(child: Column(
@@ -207,7 +206,7 @@ class _BabyBottleState extends State<BabyBottleView> {
       child: Row(
         children: [
           Expanded(
-            flex: 3,
+            flex: 4,
             child: DefaultTextStyle(style: const TextStyle(fontSize: 32), child: TextButton(
               onPressed: _timePicked,
               child: Text('${_selectedHour.toString().padLeft(2, '0')}:${_selectedMin.toString().padLeft(2, '0')}')),
@@ -241,7 +240,7 @@ class _BabyBottleState extends State<BabyBottleView> {
   Timer? _longPressTimer;
   bool _isLongPressTriggered = false;
   void _handleTapDown(TapDownDetails d){
-    _longPressTimer = Timer(const Duration(seconds: 5), (){
+    _longPressTimer = Timer(const Duration(seconds: 3), (){
       if(mounted) {
         setState(() {
           _isLongPressTriggered = true;
@@ -275,8 +274,8 @@ class _BabyBottleState extends State<BabyBottleView> {
             _refresh();
           }, icon: const Icon(Icons.restore_from_trash)),
           IconButton(onPressed: (){
-          _sync();
-          _refresh();
+            _sync();
+            _refresh();
           }, icon: const Icon(Icons.refresh)),
           IconButton(onPressed: (){
             setState(() {
@@ -288,16 +287,28 @@ class _BabyBottleState extends State<BabyBottleView> {
     );
   }
 
+  void _show(String msg){
+    Fluttertoast.showToast(
+      timeInSecForIosWeb: 3, msg: msg);
+  }
 
   _addFeeding(){
     DateTime now = DateTime.now();
+    DateTime cur = DateTime(now.year,now.month,now.day,_selectedHour,_selectedMin);
+    if(cur.difference(_lastFeedTime).inMinutes.abs() < 5){ // 防止误操作
+      _show("时间间隔过密");
+      return;
+    }
     _lastFeedTime = DateTime(now.year,now.month,now.day,_selectedHour,_selectedMin);
     try{
       _lastCount = int.parse(_countController.text);
     }catch(e){
+      _show("输入格式不正确");
     }
-    if(_lastCount == 0) return;
-
+    if(_lastCount < 0 || _lastCount > 300) {
+      _show("数据数据不合规");
+      return;
+    }
     addMapForList(cacheKey, {'time':_lastFeedTime,'amount':_lastCount});
     _refresh();
     _putRemote(_lastFeedTime, _lastCount);
@@ -381,17 +392,26 @@ class _TimeDialogState extends State<TimeDialog> {
   int _selectedMin = DateTime.now().minute;
   @override
   Widget build(BuildContext context) {
+    double w =  MediaQuery.of(context).size.width * 0.25;
+    double h = MediaQuery.of(context).size.height * 0.2;
+
     return AlertDialog(
       title: const Text('选择时间'),
+
       content: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(
-            width: 18,
+          Container (
+            width: w,
+            height: h,
+            alignment: AlignmentDirectional.center,
             child: _hourSelect()
-          ),const Text(' : '),
-          SizedBox(
-            width: 18,
+          ),const Text(' : ',style: TextStyle(fontWeight: FontWeight.w700),),
+          Container(
+            width: w,
+            height: h,
+            alignment: AlignmentDirectional.center,
             child: _minSelect()
           )
         ],
@@ -407,9 +427,11 @@ class _TimeDialogState extends State<TimeDialog> {
 
   Widget _hourSelect(){
     return DropdownButton<int>(
+      alignment: AlignmentDirectional.center,
       value: _selectedHour,
       items: List.generate(24, (index) => index).map((int hour){
         return DropdownMenuItem<int>(
+            alignment: AlignmentDirectional.center,
             value: hour,
             child: Text(hour.toString().padLeft(2, '0'),style: const TextStyle(fontSize: 24),));
       }).toList(),
